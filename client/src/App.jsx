@@ -24,26 +24,62 @@ const addTask = () => {
       setTitle("");
     });
 };
+const completeTask = (id) => {
+  fetch(`http://localhost:5000/tasks/${id}/complete`, {
+    method: "PUT",
+  })
+    .then((res) => res.json())
+    .then((updatedTask) => {
+      setTasks((prevTasks) =>
+        prevTasks.map((task) =>
+          task.id === updatedTask.id ? updatedTask : task
+        )
+      );
+    });
+};
+
+const deleteTask = (id) => {
+  fetch(`http://localhost:5000/tasks/${id}`, {
+    method: "DELETE",
+  }).then(() => {
+    setTasks((prev) => prev.filter((task) => task.id !== id));
+  });
+};
 
 return (
-  <div style={{ padding: "20px" }}>
+  <div style={{ padding: "20px", maxWidth: "500px", margin: "auto" }}>
     <h1>To-Do App</h1>
 
     <input
       value={title}
       onChange={(e) => setTitle(e.target.value)}
       placeholder="New task..."
+      style={{ padding: "8px", width: "70%" }}
     />
 
-    <button onClick={addTask}>Add</button>
+    <button onClick={addTask} style={{ padding: "8px" }}>
+      Add
+    </button>
 
     <ul>
       {tasks.map((task) => (
         <li key={task.id}>
           {task.title} — 🔥 {task.streak}
+
+          <button
+            onClick={() => completeTask(task.id)}
+            disabled={task.completed}
+          >
+            {task.completed ? "Done ✅" : "Complete❓"}
+          </button>
+
+          <button onClick={() => deleteTask(task.id)}>
+            Delete ❌
+          </button>
         </li>
       ))}
     </ul>
+
   </div>
 );
 }
