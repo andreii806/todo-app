@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const { Pool } = require("pg");
 
 const app = express();
 const PORT = 5000;
@@ -7,61 +8,22 @@ const PORT = 5000;
 app.use(cors());
 app.use(express.json());
 
-let tasks = [];
+/**
+ * PostgreSQL connection
+ */
+const pool = new Pool({
+  connectionString: "postgresql://postgres:postgres@localhost:5432/todoapp",
+});
 
+/**
+ * Helpers
+ */
 const getToday = () => {
   return new Date().toISOString().split("T")[0];
 };
 
-app.get("/tasks", (req, res) => {
-  res.json(tasks);
-});
-
-app.post("/tasks", (req, res) => {
-  const { title } = req.body;
-
-  const newTask = {
-    id: Date.now(),
-    title,
-    completed: false,
-    createdAt: getToday(),
-    completedDates: [],
-    streak: 0,
-  };
-
-  tasks.push(newTask);
-
-  res.json(newTask);
-});
-
-app.put("/tasks/:id/complete", (req, res) => {
-  const task = tasks.find(t => t.id == req.params.id);
-
-  if (!task) {
-    return res.status(404).json({ error: "Task not found" });
-  }
-
-  const today = getToday();
-
-  task.completed = true;
-
-  if (!task.completedDates.includes(today)) {
-    task.completedDates.push(today);
-  }
-
-  task.streak = calculateStreak(task.completedDates);
-
-  res.json(task);
-});
-
-app.delete("/tasks/:id", (req, res) => {
-  tasks = tasks.filter(t => t.id != req.params.id);
-
-  res.json({ message: "Task deleted" });
-});
-
 function calculateStreak(dates) {
-  if (dates.length === 0) return 0;
+  if (!Array.isArray(dates) || dates.length === 0) return 0;
 
   const sorted = [...dates].sort();
 
@@ -83,7 +45,107 @@ function calculateStreak(dates) {
   return streak;
 }
 
+/**
+ * GET all tasks
+ */
+app.get("/tasks", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM tasks ORDER BY id DESC"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * CREATE task
+ */
+app.post("/tasks", async (req, res) => {
+  try {
+    const { title } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO tasks (title, created_at, completed, completed_dates, streak)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [title, getToday(), false, [], 0]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * COMPLETE task + update streak
+ */
+app.put("/tasks/:id/complete", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      "SELECT * FROM tasks WHERE id = $1",
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    const task = result.rows[0];
+    const today = getToday();
+
+    let dates = Array.isArray(task.completed_dates)
+      ? task.completed_dates
+      : [];
+
+    if (!dates.includes(today)) {
+      dates.push(today);
+    }
+
+    const streak = calculateStreak(dates);
+
+    const updated = await pool.query(
+      `UPDATE tasks
+       SET completed = true,
+           completed_dates = $1,
+           streak = $2
+       WHERE id = $3
+       RETURNING *`,
+      [dates, streak, id]
+    );
+
+    res.json(updated.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * DELETE task
+ */
+app.delete("/tasks/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await pool.query("DELETE FROM tasks WHERE id = $1", [id]);
+
+    res.json({ message: "Deleted" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * Start server
+ */
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
