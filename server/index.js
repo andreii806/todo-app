@@ -4,6 +4,8 @@ const { Pool } = require("pg");
 
 const app = express();
 const PORT = 5000;
+// 1000 miliseconds, 60 seconds, 60 minutes, 24 hours
+const ONE_DAY = 1000 * 60 * 60 * 24;
 
 app.use(cors());
 app.use(express.json());
@@ -22,38 +24,36 @@ const getToday = () => {
   return new Date().toISOString().split("T")[0];
 };
 
-function calculateStreak(dates) {
-  if (!Array.isArray(dates) || dates.length === 0) return 0;
-
-  const sorted = [...dates].sort();
-
-  let streak = 1;
-
-  for (let i = sorted.length - 1; i > 0; i--) {
-    const current = new Date(sorted[i]);
-    const previous = new Date(sorted[i - 1]);
-
-    const diff = (current - previous) / (1000 * 60 * 60 * 24);
-
-    if (diff === 1) {
-      streak++;
-    } else {
-      break;
-    }
-  }
-
-  return streak;
-}
-
 /**
  * GET all tasks
  */
+const getCurrentStreak = (task) =>{
+  if (!task.last_completed_date){
+    return 0;
+  }
+
+  const today = new Date(getToday())
+  const lastDate = new Date(task.last_completed_date);
+
+  const diffDays = Math.floor(
+    (today - lastDate) / ONE_DAY
+  );
+
+  if (diffDays === 0) return task.streak;
+  if (diffDays === 1) return task.streak;
+
+  return 0;
+}
+
 app.get("/tasks", async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT * FROM tasks ORDER BY id DESC"
     );
-    res.json(result.rows);
+    const tasks = result.rows.map(task => ({
+      ...task
+    }));
+    res.json(tasks);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
@@ -98,26 +98,38 @@ app.put("/tasks/:id/complete", async (req, res) => {
     }
 
     const task = result.rows[0];
-    const today = getToday();
+    const today = new Date();
+    let streak = task.streak || 0
+    if (!task.last_completed_date){
+      streak = 1;
+    } else{
+      const lastDate = new Date(task.last_completed_date);
+      const diffDays = Math.floor(
+        (today - lastDate) / ONE_DAY
+      );
 
-    let dates = Array.isArray(task.completed_dates)
-      ? task.completed_dates
-      : [];
-
-    if (!dates.includes(today)) {
-      dates.push(today);
+      if (diffDays === 0){
+        return res.json({
+          ...task,
+          streak,
+        });
+      }
+      if (diffDays === 1){
+        streak += 1;
+      }
+      else{
+        streak = 1;
+      }
     }
-
-    const streak = calculateStreak(dates);
 
     const updated = await pool.query(
       `UPDATE tasks
        SET completed = true,
-           completed_dates = $1,
-           streak = $2
+           streak = $1,
+           last_completed_date = $2
        WHERE id = $3
        RETURNING *`,
-      [dates, streak, id]
+      [streak, getToday(), id]
     );
 
     res.json(updated.rows[0]);
