@@ -29,12 +29,10 @@ const completeTask = (id) => {
     method: "PUT",
   })
     .then((res) => res.json())
-    .then((updatedTask) => {
-      setTasks((prevTasks) =>
-        prevTasks.map((task) =>
-          task.id === updatedTask.id ? updatedTask : task
-        )
-      );
+    .then(() => {
+        fetch("http://localhost:5000/tasks")
+        .then((res) => res.json())
+        .then((data) => setTasks(data));
     });
 };
 
@@ -46,6 +44,18 @@ const deleteTask = (id) => {
   });
 };
 
+const getToday = () => {
+  return new Date().toISOString().split("T")[0];
+};
+
+const formatDate = (date) => {
+  if (!date) return null;
+
+  const d = new Date(date);
+  return d.getFullYear() + "-" +
+    String(d.getMonth() + 1). padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0");
+};
 return (
   <div style={{ padding: "20px", maxWidth: "500px", margin: "auto" }}>
     <h1>To-Do App</h1>
@@ -68,9 +78,36 @@ return (
 
           <button
             onClick={() => completeTask(task.id)}
-            disabled={task.completed}
+            disabled={
+              formatDate(task.last_completed_date) === getToday()
+            }
+            style={{
+              marginLeft: "10px",
+              padding: "6px 10px",
+              border: "none",
+              borderRadius: "6px",
+
+              cursor:
+                formatDate(task.last_completed_date) === getToday()
+                  ? "not-allowed"
+                  : "pointer",
+
+              backgroundColor:
+                formatDate(task.last_completed_date) === getToday()
+                  ? "#999"
+                  : "#ff9800",
+
+              color: "white",
+
+              opacity:
+                formatDate(task.last_completed_date) === getToday()
+                  ? 0.6
+                  : 1,
+            }}
           >
-            {task.completed ? "Done ✅" : "Complete❓"}
+            {formatDate(task.last_completed_date) === getToday()
+              ? "Completed ✅"
+              : "Complete 🔥"}
           </button>
 
           <button onClick={() => deleteTask(task.id)}>

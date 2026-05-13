@@ -50,13 +50,12 @@ app.get("/tasks", async (req, res) => {
     const result = await pool.query(
       "SELECT * FROM tasks ORDER BY id DESC"
     );
-    const tasks = result.rows.map(task => ({
-      ...task
-    }));
-    res.json(tasks);
+
+     return res.json(result.rows);
+
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Server error" });
   }
 });
 
