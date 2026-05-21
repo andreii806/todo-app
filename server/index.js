@@ -4,8 +4,7 @@ const { Pool } = require("pg");
 
 const app = express();
 const PORT = 5000;
-// 1000 miliseconds, 60 seconds, 60 minutes, 24 hours
-const ONE_DAY = 1000 * 60 * 60 * 24;
+
 
 app.use(cors());
 app.use(express.json());
@@ -21,30 +20,12 @@ const pool = new Pool({
  * Helpers
  */
 const getToday = () => {
-  return new Date().toISOString().split("T")[0];
+  return new Date().toLocaleDateString("en-CA", {timeZone: "Europe/Bucharest",});
 };
 
 /**
  * GET all tasks
  */
-const getCurrentStreak = (task) =>{
-  if (!task.last_completed_date){
-    return 0;
-  }
-
-  const today = new Date(getToday())
-  const lastDate = new Date(task.last_completed_date);
-
-  const diffDays = Math.floor(
-    (today - lastDate) / ONE_DAY
-  );
-
-  if (diffDays === 0) return task.streak;
-  if (diffDays === 1) return task.streak;
-
-  return 0;
-}
-
 app.get("/tasks", async (req, res) => {
   try {
     const result = await pool.query(
@@ -97,22 +78,27 @@ app.put("/tasks/:id/complete", async (req, res) => {
     }
 
     const task = result.rows[0];
-    const today = new Date();
-    let streak = task.streak || 0
-    if (!task.last_completed_date){
+    const today = getToday();
+    let streak = task.streak || 0;
+    const last =
+      task.last_completed_date
+       ? new Date(task.last_completed_date)
+        .toLocaleDateString("en-CA", {
+          timeZone: "Europe/Bucharest",
+        })
+    : null;
+    if (!last){
       streak = 1;
-    } else{
-      const lastDate = new Date(task.last_completed_date);
-      const diffDays = Math.floor(
-        (today - lastDate) / ONE_DAY
+    }
+    else if (last === today) return res.json(task);
+    else {
+      const lastDate = new Date(last);
+      const todayDate = new Date(today);
+
+      const diffDays = Math.round(
+        (todayDate - lastDate) / (1000 * 60 * 60 * 24)
       );
 
-      if (diffDays === 0){
-        return res.json({
-          ...task,
-          streak,
-        });
-      }
       if (diffDays === 1){
         streak += 1;
       }
@@ -128,7 +114,7 @@ app.put("/tasks/:id/complete", async (req, res) => {
            last_completed_date = $2
        WHERE id = $3
        RETURNING *`,
-      [streak, getToday(), id]
+      [streak, today, id]
     );
 
     res.json(updated.rows[0]);
